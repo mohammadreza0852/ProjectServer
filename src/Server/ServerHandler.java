@@ -1,8 +1,6 @@
 package Server;
 
-import Model.Message;
-import Model.User;
-import Model.UserChat;
+import Model.*;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -42,6 +40,7 @@ public class ServerHandler {
             if (temp.getUsername().equals(username) && temp.getPassword().equals(password)){
                 try {
                     foundUser = true;
+                    outputStream.reset();
                     outputStream.writeObject(users.get(i));
                     outputStream.flush();
                     break;
@@ -53,6 +52,7 @@ public class ServerHandler {
 
         if (!foundUser){
             try {
+                outputStream.reset();
                 outputStream.writeObject(null);
                 outputStream.flush();
             } catch (IOException e) {
@@ -62,6 +62,36 @@ public class ServerHandler {
     }
 
     public void sendMessage(Message clientReq) {
+        if (clientReq.getMessageType() == MessageType.Forward){
+            System.out.println(clientReq.getSenderEmail() + " forward");
+            System.out.print("Message: " + clientReq.getSubject());
+            for (int i = 0; i < clientReq.getFileNames().size(); i++) {
+                System.out.print(clientReq.getFileNames().get(i));
+            }
+            System.out.println();
+            System.out.println("from " + clientReq.getSenderEmail() + " to " + clientReq.getGetterEmail());
+            System.out.println(new MessageDate().getDate());
+        }
+        else  if (clientReq.getMessageType() == MessageType.Send){
+            System.out.println(clientReq.getSenderEmail() + " send");
+            System.out.print("Message: " + clientReq.getSubject());
+            for (int i = 0; i < clientReq.getFileNames().size(); i++) {
+                System.out.print(clientReq.getFileNames().get(i));
+            }
+            System.out.println();
+            System.out.println("to " + clientReq.getGetterEmail());
+            System.out.println(new MessageDate().getDate());
+        }
+        else  if (clientReq.getMessageType() == MessageType.Reply){
+            System.out.println(clientReq.getSenderEmail() + " reply");
+            System.out.print("Message: " + clientReq.getSubject());
+            for (int i = 0; i < clientReq.getFileNames().size(); i++) {
+                System.out.print(clientReq.getFileNames().get(i));
+            }
+            System.out.println();
+            System.out.println("to " + clientReq.getGetterEmail());
+            System.out.println(new MessageDate().getDate());
+        }
         boolean recieverAvailable = false;
         User sender = null;
         User reciever = null;
@@ -74,6 +104,12 @@ public class ServerHandler {
                 recieverAvailable = true;
             }
         }
+        boolean senderNotBlocked = true;
+        for (int i = 0; i < reciever.getBlockedList().size(); i++) {
+            if (reciever.getBlockedList().get(i).equals(sender.getGmailAdress())){
+                senderNotBlocked = false;
+            }
+        }
         if (recieverAvailable){
             boolean chatExists = false;
             for (int i = 0; i < sender.getInboxMessages().size(); i++) {
@@ -81,20 +117,20 @@ public class ServerHandler {
                         && clientReq.getSubject().equals(sender.getInboxMessages().get(i).getSubject())){
                     chatExists = true;
                     sender.getInboxMessages().get(i).setSomeText(clientReq.getText().substring(0,5));
-                    System.out.println(sender.getInboxMessages().get(i).getSomeText());
                     sender.getInboxMessages().get(i).getChatMessages().add(clientReq);
                 }
             }
-            if (chatExists) {
+            if (chatExists && senderNotBlocked) {
                 for (int i = 0; i < reciever.getInboxMessages().size(); i++) {
                     if (reciever.getInboxMessages().get(i).getContactEmail().equals(clientReq.getSenderEmail())
                             && clientReq.getSubject().equals(reciever.getInboxMessages().get(i).getSubject())){
                         reciever.getInboxMessages().get(i).setSomeText(clientReq.getText().substring(0,5));
+                        clientReq.setHasBeenRead(false);
                         reciever.getInboxMessages().get(i).getChatMessages().add(clientReq);
                     }
                 }
             }
-            if (!chatExists){
+            if (!chatExists && senderNotBlocked){
                 UserChat userChat = new UserChat();
                 userChat.setChatMessages(new ArrayList<>());
                 userChat.setContactEmail(clientReq.getGetterEmail());
@@ -108,22 +144,53 @@ public class ServerHandler {
                 recieverChat.setSomeText(clientReq.getText().substring(0,5));
                 recieverChat.setUserEmail(reciever.getGmailAdress());
                 recieverChat.setContactEmail(sender.getGmailAdress());
+                clientReq.setHasBeenRead(false);
                 recieverChat.getChatMessages().add(clientReq);
                 recieverChat.setSubject(clientReq.getSubject());
                 reciever.getInboxMessages().add(recieverChat);
+            }
+
+            if (!senderNotBlocked){
+                Message error = new Message();
+                error.setGetterEmail(sender.getGmailAdress());
+                error.setSenderEmail("mailerdaemon@gmail.com");
+                error.setSubject("error" + clientReq.getGetterEmail());
+                error.setText("you have been blocked by " + clientReq.getGetterEmail());
+                boolean chatExists2 = false;
+                for (int i = 0; i < sender.getInboxMessages().size(); i++) {
+                    if (sender.getInboxMessages().get(i).getContactEmail().equals(error.getSenderEmail())
+                            && sender.getInboxMessages().get(i).getSubject().equals(error.getSubject())){
+                        chatExists2 = true;
+                        sender.getInboxMessages().get(i).getChatMessages().add(clientReq);
+                        sender.getInboxMessages().get(i).getChatMessages().add(error);
+                    }
+                }
+
+                if (!chatExists2){
+                    UserChat userChat = new UserChat();
+                    userChat.setChatMessages(new ArrayList<>());
+                    userChat.setContactEmail(error.getSenderEmail());
+                    userChat.setSomeText(error.getText().substring(0,5));
+                    userChat.setUserEmail(sender.getGmailAdress());
+                    userChat.setSubject(error.getSubject());
+                    userChat.getChatMessages().add(clientReq);
+                    userChat.getChatMessages().add(error);
+                    sender.getInboxMessages().add(userChat);
+                }
             }
         }
         else {
            Message error = new Message();
            error.setGetterEmail(sender.getGmailAdress());
            error.setSenderEmail("mailerdaemon@gmail.com");
-           error.setSubject("error");
+           error.setSubject("error" + clientReq.getGetterEmail());
            error.setText("reciever with " + clientReq.getGetterEmail() + " email adress is not available");
            boolean chatExists = false;
             for (int i = 0; i < sender.getInboxMessages().size(); i++) {
                 if (sender.getInboxMessages().get(i).getContactEmail().equals(error.getSenderEmail())
                         && sender.getInboxMessages().get(i).getSubject().equals(error.getSubject())){
                     chatExists = true;
+                    sender.getInboxMessages().get(i).getChatMessages().add(clientReq);
                     sender.getInboxMessages().get(i).getChatMessages().add(error);
                 }
             }
@@ -158,13 +225,13 @@ public class ServerHandler {
             userChat.getChatMessages().add(clientReq);
             sender.getSentMessages().add(userChat);
         }
+
         try {
             outputStream.reset();
             outputStream.writeObject(sender);
         } catch (IOException e) {
             e.printStackTrace();
         }
-
     }
 
     public void handlePicture(String substring) {
@@ -193,10 +260,46 @@ public class ServerHandler {
         }
     }
 
-    public void refreshUser(User clientReq) {
+    public void deleteMessage(User clientReq) {
         for (int i = 0; i < users.size(); i++) {
             if (users.get(i).getUsername().equals(clientReq.getUsername())){
                 users.set(i,clientReq);
+            }
+        }
+        if (clientReq.getRequestServerType() == RequestServerType.DeleteConv){
+
+        }
+        else  if (clientReq.getRequestServerType() == RequestServerType.DeleteMsg){
+
+        }
+    }
+
+    public void refresh(User clientReq) throws IOException {
+        User user = null;
+        for (int i = 0; i < users.size(); i++) {
+            if (clientReq.getUsername().equals(users.get(i).getUsername())){
+                user = users.get(i);
+            }
+        }
+        outputStream.reset();
+        outputStream.writeObject(user);
+        outputStream.flush();
+    }
+
+    public void handleBlock(String s, String s1) {
+        for (int i = 0; i < users.size(); i++) {
+            if (users.get(i).getGmailAdress().equals(s)){
+                users.get(i).getBlockedList().add(s1);
+                break;
+            }
+        }
+    }
+
+    public void handleUnblock(String s, String s1) {
+        for (int i = 0; i < users.size(); i++) {
+            if (users.get(i).getGmailAdress().equals(s)){
+                users.get(i).getBlockedList().remove(s1);
+                break;
             }
         }
     }

@@ -1,6 +1,8 @@
 package Model;
 
 import java.io.Serializable;
+import java.util.Calendar;
+import java.util.Date;
 
 public class BirthDay implements Serializable {
     private static final long serialVersionUID = 55L;
@@ -33,8 +35,9 @@ public class BirthDay implements Serializable {
     }
 
     public int calAge(){
-
-        return 2019 - year;
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTime(new Date());
+        return ( calendar.get(Calendar.YEAR) - year ) * 360 + ( calendar.get(Calendar.MONTH) - month ) * 30;
     }
 
 }

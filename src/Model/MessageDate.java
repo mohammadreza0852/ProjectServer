@@ -8,13 +8,10 @@ import java.util.Date;
 
 public class MessageDate implements Serializable {
     private static final long serialVersionUID = 20L;
-    private Calendar calendar = Calendar.getInstance();
-    private Date date = calendar.getTime();
-    private DateFormat dateFormat = new SimpleDateFormat("HH:mm:ss");
-    String formattedDate = dateFormat. format(date);
-
+    private DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+    private Date date = new Date();
     public String getDate() {
-        return formattedDate;
+        return dateFormat.format(date);
     }
 
 }

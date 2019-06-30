@@ -2,11 +2,40 @@ package Model;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Objects;
 
 public class UserChat implements Serializable {
     private static final long serialVersionUID = 88L;
     private String userEmail;
     private String contactEmail;
+    private RequestServerType requestServerType;
+
+    public RequestServerType getRequestServerType() {
+        return requestServerType;
+    }
+
+    public void setRequestServerType(RequestServerType requestServerType) {
+        this.requestServerType = requestServerType;
+    }
+
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        UserChat userChat = (UserChat) o;
+        return Objects.equals(userEmail, userChat.userEmail) &&
+                Objects.equals(contactEmail, userChat.contactEmail) &&
+                Objects.equals(chatMessages, userChat.chatMessages) &&
+                Objects.equals(someText, userChat.someText) &&
+                Objects.equals(subject, userChat.subject);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(userEmail, contactEmail, chatMessages, someText, subject);
+    }
+
     private ArrayList<Message> chatMessages;
     private String someText;
 

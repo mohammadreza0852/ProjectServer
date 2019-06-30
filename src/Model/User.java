@@ -4,6 +4,9 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.Objects;
 
 public class User implements Serializable {
     private static final long serialVersionUID = 10;
@@ -19,6 +22,65 @@ public class User implements Serializable {
     private String password;
     private int age;
     private String phoneNumber;
+    private RequestServerType requestServerType;
+    private ArrayList<String> blockedList;
+
+    public ArrayList<String> getBlockedList() {
+        return blockedList;
+    }
+
+    public void setBlockedList(ArrayList<String> blockedList) {
+        this.blockedList = blockedList;
+    }
+
+    public RequestServerType getRequestServerType() {
+        return requestServerType;
+    }
+
+    public void setRequestServerType(RequestServerType requestServerType) {
+        this.requestServerType = requestServerType;
+    }
+
+    public ArrayList<Message> getOutbox() {
+        return Outbox;
+    }
+
+    public void setOutbox(ArrayList<Message> outbox) {
+        Outbox = outbox;
+    }
+
+    private ArrayList<Message> Outbox;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        User user = (User) o;
+        return age == user.age &&
+                Objects.equals(inputStream, user.inputStream) &&
+                Objects.equals(outputStream, user.outputStream) &&
+                Objects.equals(firstName, user.firstName) &&
+                Objects.equals(lastName, user.lastName) &&
+                Objects.equals(birthDay, user.birthDay) &&
+                Objects.equals(gmailAdress, user.gmailAdress) &&
+                Objects.equals(username, user.username) &&
+                Objects.equals(password, user.password) &&
+                Objects.equals(phoneNumber, user.phoneNumber) &&
+                gender == user.gender &&
+                Objects.equals(userImageURL, user.userImageURL) &&
+                Objects.equals(sentMessages, user.sentMessages) &&
+                Objects.equals(inboxMessages, user.inboxMessages) &&
+                Arrays.equals(bufferImage, user.bufferImage) &&
+                userRequest == user.userRequest;
+    }
+
+    @Override
+    public int hashCode() {
+        int result = Objects.hash(inputStream, outputStream, firstName, lastName, birthDay, gmailAdress, username, password, age, phoneNumber, gender, userImageURL, sentMessages, inboxMessages, userRequest);
+        result = 31 * result + Arrays.hashCode(bufferImage);
+        return result;
+    }
+
     private Gender gender;
     private String userImageURL;
     private ArrayList<UserChat> sentMessages;
@@ -116,7 +178,7 @@ public class User implements Serializable {
     }
 
     public int getAge() {
-        return age;
+        return birthDay.calAge();
     }
 
     public void setAge(int age) {
