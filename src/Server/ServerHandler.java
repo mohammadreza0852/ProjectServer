@@ -13,7 +13,7 @@ public class ServerHandler {
     private Socket socket;
     private ObjectInputStream inputStream;
     private ObjectOutputStream outputStream;
-    private static ArrayList<User> users = new ArrayList<>();
+    public static ArrayList<User> users = new ArrayList<>();
 
     ServerHandler(Socket socket, ObjectInputStream inputStream, ObjectOutputStream outputStream) {
         this.socket = socket;
@@ -30,7 +30,33 @@ public class ServerHandler {
     }
 
     public void handleSignUp(User client){
-        users.add(client);
+        boolean canSignUp = true;
+        for (int i = 0; i < users.size(); i++) {
+            if (users.get(i).getUsername().equals(client.getUsername())){
+                canSignUp = false;
+            }
+        }
+        if (canSignUp) {
+            System.out.println(((User) client).getUsername() + " register " + ((User) client).getUserImage());
+            System.out.println(new MessageDate().getDate());
+            users.add(client);
+            try {
+                outputStream.reset();
+                outputStream.writeObject("accepted");
+                outputStream.flush();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        else {
+            try {
+                outputStream.reset();
+                outputStream.writeObject("rejected");
+                outputStream.flush();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     public void handleSignIn(String username,String password){
@@ -61,7 +87,7 @@ public class ServerHandler {
         }
     }
 
-    public void sendMessage(Message clientReq) {
+    public void printMessages(Message clientReq){
         if (clientReq.getMessageType() == MessageType.Forward){
             System.out.println(clientReq.getSenderEmail() + " forward");
             System.out.print("Message: " + clientReq.getSubject());
@@ -92,6 +118,10 @@ public class ServerHandler {
             System.out.println("to " + clientReq.getGetterEmail());
             System.out.println(new MessageDate().getDate());
         }
+    }
+
+    public void sendMessage(Message clientReq) {
+        printMessages(clientReq);
         boolean recieverAvailable = false;
         User sender = null;
         User reciever = null;
@@ -105,22 +135,116 @@ public class ServerHandler {
             }
         }
         boolean senderNotBlocked = true;
-        for (int i = 0; i < reciever.getBlockedList().size(); i++) {
-            if (reciever.getBlockedList().get(i).equals(sender.getGmailAdress())){
-                senderNotBlocked = false;
+        if (reciever != null) {
+            for (int i = 0; i < reciever.getBlockedList().size(); i++) {
+                if (sender != null && reciever.getBlockedList().get(i).equals(sender.getGmailAdress())) {
+                    senderNotBlocked = false;
+                }
             }
         }
         if (recieverAvailable){
-            boolean chatExists = false;
+            sendMessageRecieverAvailable(clientReq, sender, reciever, senderNotBlocked);
+        }
+        else {
+            sendMessageNoReciever(clientReq, sender);
+        }
+        boolean sentMessageExist = false;
+        if (sender != null) {
+            for (int i = 0; i < sender.getSentMessages().size(); i++) {
+                if (sender.getSentMessages().get(i).getContactEmail().equals(clientReq.getGetterEmail())
+                        && sender.getSentMessages().get(i).getSubject().equals(clientReq.getSubject())){
+                    if (sender.getSentMessages().get(i).getChatMessages().get(0).getSenderEmail()
+                            .equals(sender.getGmailAdress())) {
+                        sender.getSentMessages().get(i).getChatMessages().add(clientReq);
+                        sender.getSentMessages().get(i).setSomeText(clientReq.getText().substring(0, 5));
+                    }
+                    sentMessageExist = true;
+                }
+            }
+        }
+        if (reciever != null){
+            for (int i = 0; i < reciever.getSentMessages().size(); i++) {
+                if (reciever.getSentMessages().get(i).getContactEmail().equals(clientReq.getSenderEmail())
+                        && reciever.getSentMessages().get(i).getSubject().equals(clientReq.getSubject())){
+                    if (reciever.getSentMessages().get(i).getChatMessages().get(0).getSenderEmail()
+                            .equals(reciever.getGmailAdress())) {
+                        reciever.getSentMessages().get(i).getChatMessages().add(clientReq);
+                        reciever.getSentMessages().get(i).setSomeText(clientReq.getText().substring(0, 5));
+                    }
+                    sentMessageExist = true;
+                }
+            }
+        }
+
+        if (!sentMessageExist){
+            UserChat userChat = new UserChat();
+            userChat.setChatMessages(new ArrayList<>());
+            userChat.setContactEmail(clientReq.getGetterEmail());
+            userChat.setSomeText(clientReq.getText().substring(0,5));
+            if (sender != null) {
+                userChat.setUserEmail(sender.getGmailAdress());
+            }
+            userChat.setSubject(clientReq.getSubject());
+            userChat.getChatMessages().add(clientReq);
+            if (sender != null) {
+                sender.getSentMessages().add(userChat);
+            }
+        }
+
+        try {
+            outputStream.reset();
+            outputStream.writeObject(sender);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void sendMessageNoReciever(Message clientReq, User sender) {
+        Message error = new Message();
+        if (sender != null) {
+            error.setGetterEmail(sender.getGmailAdress());
+        }
+        error.setSenderEmail("mailerdaemon@gmail.com");
+        error.setSubject("error" + clientReq.getGetterEmail());
+        error.setText("reciever with " + clientReq.getGetterEmail() + " email adress is not available");
+        boolean chatExists = false;
+        for (int i = 0; i < sender.getInboxMessages().size(); i++) {
+            if (sender.getInboxMessages().get(i).getContactEmail().equals(error.getSenderEmail())
+                    && sender.getInboxMessages().get(i).getSubject().equals(error.getSubject())){
+                chatExists = true;
+                sender.getInboxMessages().get(i).getChatMessages().add(clientReq);
+                sender.getInboxMessages().get(i).getChatMessages().add(error);
+            }
+        }
+
+        if (!chatExists){
+            UserChat userChat = new UserChat();
+            userChat.setChatMessages(new ArrayList<>());
+            userChat.setContactEmail(error.getSenderEmail());
+            userChat.setSomeText(error.getText().substring(0,5));
+            userChat.setUserEmail(sender.getGmailAdress());
+            userChat.setSubject(error.getSubject());
+            userChat.getChatMessages().add(clientReq);
+            userChat.getChatMessages().add(error);
+            sender.getInboxMessages().add(userChat);
+        }
+    }
+
+    private void sendMessageRecieverAvailable(Message clientReq, User sender, User reciever, boolean senderNotBlocked) {
+        boolean chatExists = false;
+        if (sender != null) {
             for (int i = 0; i < sender.getInboxMessages().size(); i++) {
                 if (sender.getInboxMessages().get(i).getContactEmail().equals(clientReq.getGetterEmail())
                         && clientReq.getSubject().equals(sender.getInboxMessages().get(i).getSubject())){
                     chatExists = true;
+                    clientReq.setHasBeenRead(true);
                     sender.getInboxMessages().get(i).setSomeText(clientReq.getText().substring(0,5));
                     sender.getInboxMessages().get(i).getChatMessages().add(clientReq);
                 }
             }
-            if (chatExists && senderNotBlocked) {
+        }
+        if (chatExists && senderNotBlocked) {
+            if (reciever != null) {
                 for (int i = 0; i < reciever.getInboxMessages().size(); i++) {
                     if (reciever.getInboxMessages().get(i).getContactEmail().equals(clientReq.getSenderEmail())
                             && clientReq.getSubject().equals(reciever.getInboxMessages().get(i).getSubject())){
@@ -130,72 +254,54 @@ public class ServerHandler {
                     }
                 }
             }
-            if (!chatExists && senderNotBlocked){
-                UserChat userChat = new UserChat();
-                userChat.setChatMessages(new ArrayList<>());
-                userChat.setContactEmail(clientReq.getGetterEmail());
-                userChat.setSomeText(clientReq.getText().substring(0,5));
+        }
+        if (!chatExists && senderNotBlocked){
+            UserChat userChat = new UserChat();
+            userChat.setChatMessages(new ArrayList<>());
+            userChat.setContactEmail(clientReq.getGetterEmail());
+            userChat.setSomeText(clientReq.getText().substring(0,5));
+            if (sender != null) {
                 userChat.setUserEmail(sender.getGmailAdress());
-                userChat.setSubject(clientReq.getSubject());
-                userChat.getChatMessages().add(clientReq);
+            }
+            userChat.setSubject(clientReq.getSubject());
+            userChat.getChatMessages().add(clientReq);
+            if (sender != null) {
                 sender.getInboxMessages().add(userChat);
-                UserChat recieverChat = new UserChat();
-                recieverChat.setChatMessages(new ArrayList<>());
-                recieverChat.setSomeText(clientReq.getText().substring(0,5));
+            }
+            UserChat recieverChat = new UserChat();
+            recieverChat.setChatMessages(new ArrayList<>());
+            recieverChat.setSomeText(clientReq.getText().substring(0,5));
+            if (reciever != null) {
                 recieverChat.setUserEmail(reciever.getGmailAdress());
+            }
+            if (sender != null) {
                 recieverChat.setContactEmail(sender.getGmailAdress());
-                clientReq.setHasBeenRead(false);
-                recieverChat.getChatMessages().add(clientReq);
-                recieverChat.setSubject(clientReq.getSubject());
+            }
+            clientReq.setHasBeenRead(false);
+            recieverChat.getChatMessages().add(clientReq);
+            recieverChat.setSubject(clientReq.getSubject());
+            if (reciever != null) {
                 reciever.getInboxMessages().add(recieverChat);
             }
-
-            if (!senderNotBlocked){
-                Message error = new Message();
-                error.setGetterEmail(sender.getGmailAdress());
-                error.setSenderEmail("mailerdaemon@gmail.com");
-                error.setSubject("error" + clientReq.getGetterEmail());
-                error.setText("you have been blocked by " + clientReq.getGetterEmail());
-                boolean chatExists2 = false;
-                for (int i = 0; i < sender.getInboxMessages().size(); i++) {
-                    if (sender.getInboxMessages().get(i).getContactEmail().equals(error.getSenderEmail())
-                            && sender.getInboxMessages().get(i).getSubject().equals(error.getSubject())){
-                        chatExists2 = true;
-                        sender.getInboxMessages().get(i).getChatMessages().add(clientReq);
-                        sender.getInboxMessages().get(i).getChatMessages().add(error);
-                    }
-                }
-
-                if (!chatExists2){
-                    UserChat userChat = new UserChat();
-                    userChat.setChatMessages(new ArrayList<>());
-                    userChat.setContactEmail(error.getSenderEmail());
-                    userChat.setSomeText(error.getText().substring(0,5));
-                    userChat.setUserEmail(sender.getGmailAdress());
-                    userChat.setSubject(error.getSubject());
-                    userChat.getChatMessages().add(clientReq);
-                    userChat.getChatMessages().add(error);
-                    sender.getInboxMessages().add(userChat);
-                }
-            }
         }
-        else {
-           Message error = new Message();
-           error.setGetterEmail(sender.getGmailAdress());
-           error.setSenderEmail("mailerdaemon@gmail.com");
-           error.setSubject("error" + clientReq.getGetterEmail());
-           error.setText("reciever with " + clientReq.getGetterEmail() + " email adress is not available");
-           boolean chatExists = false;
+
+        if (!senderNotBlocked){
+            Message error = new Message();
+            error.setGetterEmail(sender.getGmailAdress());
+            error.setSenderEmail("mailerdaemon@gmail.com");
+            error.setSubject("error" + clientReq.getGetterEmail());
+            error.setText("you have been blocked by " + clientReq.getGetterEmail());
+            boolean chatExists2 = false;
             for (int i = 0; i < sender.getInboxMessages().size(); i++) {
                 if (sender.getInboxMessages().get(i).getContactEmail().equals(error.getSenderEmail())
                         && sender.getInboxMessages().get(i).getSubject().equals(error.getSubject())){
-                    chatExists = true;
+                    chatExists2 = true;
                     sender.getInboxMessages().get(i).getChatMessages().add(clientReq);
                     sender.getInboxMessages().get(i).getChatMessages().add(error);
                 }
             }
 
-            if (!chatExists){
+            if (!chatExists2){
                 UserChat userChat = new UserChat();
                 userChat.setChatMessages(new ArrayList<>());
                 userChat.setContactEmail(error.getSenderEmail());
@@ -206,31 +312,6 @@ public class ServerHandler {
                 userChat.getChatMessages().add(error);
                 sender.getInboxMessages().add(userChat);
             }
-        }
-        boolean sentMessageExist = false;
-        for (int i = 0; i < sender.getSentMessages().size(); i++) {
-            if (sender.getSentMessages().get(i).getContactEmail().equals(clientReq.getGetterEmail())){
-                sender.getSentMessages().get(i).getChatMessages().add(clientReq);
-                sender.getSentMessages().get(i).setSomeText(clientReq.getText().substring(0,5));
-                sentMessageExist = true;
-            }
-        }
-        if (!sentMessageExist){
-            UserChat userChat = new UserChat();
-            userChat.setChatMessages(new ArrayList<>());
-            userChat.setContactEmail(clientReq.getGetterEmail());
-            userChat.setSomeText(clientReq.getText().substring(0,5));
-            userChat.setUserEmail(sender.getGmailAdress());
-            userChat.setSubject(clientReq.getSubject());
-            userChat.getChatMessages().add(clientReq);
-            sender.getSentMessages().add(userChat);
-        }
-
-        try {
-            outputStream.reset();
-            outputStream.writeObject(sender);
-        } catch (IOException e) {
-            e.printStackTrace();
         }
     }
 
@@ -300,6 +381,33 @@ public class ServerHandler {
             if (users.get(i).getGmailAdress().equals(s)){
                 users.get(i).getBlockedList().remove(s1);
                 break;
+            }
+        }
+    }
+
+    public void getPassword(User clientReq) {
+        boolean passFound = false;
+        for (User user: users) {
+            if (user.getUsername().equals(clientReq.getUsername()) && user.getFirstName().equals(clientReq.getFirstName())
+                  && user.getLastName().equals(clientReq.getLastName()) &&
+                    user.getBirthDay().getMonth() == clientReq.getBirthDay().getMonth()){
+                passFound = true;
+                try {
+                    outputStream.reset();
+                    outputStream.writeObject("accepted " + user.getPassword());
+                    outputStream.flush();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        if (!passFound){
+            try {
+                outputStream.reset();
+                outputStream.writeObject("rejected ");
+                outputStream.flush();
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
     }
